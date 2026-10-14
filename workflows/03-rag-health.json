@@ -1,0 +1,131 @@
+{
+  "name": "03 - Salud del índice",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "rag-health",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "052419ed-1914-4401-becd-680d3205c1a4",
+      "name": "Webhook salud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "32008c77-945e-4fbd-ad41-a70ebaf3f8fe",
+      "notes": "GET /webhook/rag-health. Cabecera X-RAG-API-Key."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM knowledge_documents WHERE source_type = 'outline')::int AS outline_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.source_type = 'outline')::int AS outline_chunks,\n  (SELECT COUNT(*) FROM knowledge_documents WHERE source_type = 'repo')::int AS repo_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.source_type = 'repo')::int AS repo_chunks,\n  (SELECT COUNT(*) FROM knowledge_documents)::int AS total_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks)::int AS total_chunks,\n  (SELECT MAX(updated_at) FROM knowledge_documents WHERE source_type = 'outline') AS last_outline_update,\n  (SELECT MAX(updated_at) FROM knowledge_documents WHERE source_type = 'repo') AS last_repo_update,\n  (SELECT COUNT(*) FROM knowledge_chunks WHERE embedding_model IS NOT NULL)::int AS embedded_chunks",
+        "options": {}
+      },
+      "id": "e9f91984-e635-498e-aa99-44b98bcb11be",
+      "name": "Leer salud",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Cuenta documentos y fragmentos por origen. No expone contenido ni vectores."
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2ddfe9ab-8351-4e80-8656-c10b628e3e4f",
+      "name": "Responder salud",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        780,
+        220
+      ],
+      "notes": "Devuelve los contadores del índice."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ error: 'health_unavailable' }) }}",
+        "options": {
+          "responseCode": 503
+        }
+      },
+      "id": "df86c345-de24-4269-b724-19ac9ebb30cc",
+      "name": "Responder error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        780,
+        420
+      ],
+      "notes": "503 si la base de datos no responde."
+    },
+    {
+      "parameters": {
+        "content": "### Salud del índice\n\nGET /webhook/rag-health\nCabecera: X-RAG-API-Key\n\nContadores por origen (outline / repo) y última actualización.",
+        "height": 150,
+        "width": 440,
+        "color": 5
+      },
+      "id": "7793658b-e5a6-407e-ab9b-5b4e9c904d50",
+      "name": "Notas salud",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        220,
+        60
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook salud": {
+      "main": [
+        [
+          {
+            "node": "Leer salud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer salud": {
+      "main": [
+        [
+          {
+            "node": "Responder salud",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "75f35d46-a95b-5cd9-a576-53bff63d486c"
+}

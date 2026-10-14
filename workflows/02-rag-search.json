@@ -1,0 +1,365 @@
+{
+  "name": "02 - Buscar (RAG)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-search",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fbb392d3-02fc-476f-bdc0-6b7c38ab9ab7",
+      "name": "Webhook búsqueda",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "bd5fd56c-6ab4-4809-86c5-e9da5ecd8339",
+      "notes": "POST /webhook/rag-search. Cabecera X-RAG-API-Key. Cuerpo: { query, limit?, source_type? }."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2f480c0d-fc78-485c-8da4-e0b9b3e3c7a7",
+              "name": "outline_url",
+              "value": "https://docs.example.com",
+              "type": "string"
+            },
+            {
+              "id": "b70da8f7-7f81-4fa2-b24d-e45f9c3fbf74",
+              "name": "embeddings_url",
+              "value": "http://embeddings:80/embed",
+              "type": "string"
+            },
+            {
+              "id": "2b600d80-8733-41dc-845c-579413b25e55",
+              "name": "embedding_model",
+              "value": "intfloat/multilingual-e5-small",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f616e680-6fa5-4f2c-bba1-9aa7dfcca902",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "Constantes del entorno. Edita aquí tu dominio de Outline, la URL del servidor de embeddings y el modelo."
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const body = item.json.body ?? item.json;\n  const query = String(body.query ?? '').trim();\n  if (!query) { out.push({ json: { valid: false, error: 'query is required' } }); continue; }\n  const requestedLimit = Number(body.limit ?? 5);\n  const limit = Number.isFinite(requestedLimit)\n    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20)\n    : 5;\n  const source_type = String(body.source_type ?? 'all').trim().toLowerCase() || 'all';\n  if (!['outline', 'repo', 'all'].includes(source_type)) {\n    out.push({ json: { valid: false, error: 'source_type must be one of: outline, repo, all' } });\n    continue;\n  }\n  out.push({ json: { valid: true, query, limit, source_type } });\n}\nreturn out;"
+      },
+      "id": "04fb0c57-06c1-4701-93b4-5587cfaf01ef",
+      "name": "Validar petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "notes": "Comprueba que la petición trae una query y normaliza limit y source_type."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "581e31de-4af2-4f28-8c43-36d876d43cb0",
+      "name": "¿Petición válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuración').first().json.embeddings_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ 'query: ' + $('Validar petición').item.json.query }}"
+            }
+          ]
+        }
+      },
+      "id": "aa95e957-76fa-452f-84d2-cfb1c6ec2839",
+      "name": "Embeddings de consulta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        220
+      ],
+      "notes": "El prefijo 'query: ' es obligatorio en los modelos E5.",
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const requests = $('Validar petición').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  let vector = raw;\n  if (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\n  if (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\n  if (!Array.isArray(vector) || vector.length !== 384) {\n    throw new Error('Embedding dimension mismatch: expected 384, received ' +\n      (Array.isArray(vector) ? vector.length : typeof vector));\n  }\n  const request = (requests[i] && requests[i].json) ? requests[i].json : items[i].json;\n  out.push({ json: { ...request, query_embedding: vector } });\n}\nreturn out;"
+      },
+      "id": "6a2d8075-c24a-4cbb-a6a3-8cb953e81899",
+      "name": "Normalizar embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        220
+      ],
+      "notes": "Valida las 384 dimensiones del vector de la consulta.",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT d.id AS document_id, d.source_type, d.title, d.canonical_url, d.collection,\n  c.chunk_index, c.content,\n  ROUND((1 - (c.embedding <=> $1::vector))::numeric, 6) AS score\nFROM knowledge_chunks c\nJOIN knowledge_documents d ON d.id = c.document_id\nWHERE ($2::text = 'all' OR d.source_type = $2::text)\nORDER BY c.embedding <=> $1::vector\nLIMIT LEAST(GREATEST($3::int, 1), 20)",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ ['[' + $json.query_embedding.join(',') + ']', $json.source_type, $json.limit] }}"
+        }
+      },
+      "id": "eb466e28-9f75-49c4-a7dc-a7c73be4af0a",
+      "name": "Búsqueda semántica",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "notes": "Ordena por distancia coseno (<=>) y devuelve los fragmentos más parecidos."
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "3de73f72-32d8-4fad-84cd-e3751af2fb5c",
+      "name": "Responder resultados",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        220
+      ],
+      "notes": "Devuelve los fragmentos con su documento de origen."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ error: 'invalid_request' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "15895cde-5f9d-48af-92e8-4e994f3b4685",
+      "name": "Responder no válida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        420
+      ],
+      "notes": "400 si la petición es inválida."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ error: 'search_unavailable' }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "9e236a60-bbc8-4c39-bbd3-445d7f3cf68e",
+      "name": "Responder error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        430
+      ],
+      "notes": "502 si falla el embedding o la base de datos."
+    },
+    {
+      "parameters": {
+        "content": "### API de búsqueda semántica\n\nPOST /webhook/rag-search\nCabecera: X-RAG-API-Key\nCuerpo: { query, limit?, source_type? }\n\nEmbebe la pregunta y busca los fragmentos más cercanos en pgvector. `source_type` puede ser outline, repo o all.",
+        "height": 170,
+        "width": 520,
+        "color": 5
+      },
+      "id": "5d8a3d86-0271-490d-9b80-043a294ea177",
+      "name": "Notas búsqueda",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        40
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook búsqueda": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Validar petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar petición": {
+      "main": [
+        [
+          {
+            "node": "¿Petición válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Petición válida?": {
+      "main": [
+        [
+          {
+            "node": "Embeddings de consulta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder no válida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings de consulta": {
+      "main": [
+        [
+          {
+            "node": "Normalizar embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar embedding": {
+      "main": [
+        [
+          {
+            "node": "Búsqueda semántica",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Búsqueda semántica": {
+      "main": [
+        [
+          {
+            "node": "Responder resultados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "c0ea8b10-70b1-5531-8dc1-d05c82e946bd"
+}

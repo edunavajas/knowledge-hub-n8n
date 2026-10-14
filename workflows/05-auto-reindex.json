@@ -1,0 +1,148 @@
+{
+  "name": "05 - Reindexado automático",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "5751e02a-9424-47f5-bf59-791e441e6c3d",
+      "name": "Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Se ejecuta cada hora. Estrategia de polling (ver README)."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0260e07e-5540-4597-b6ed-c5a72d913562",
+              "name": "outline_url",
+              "value": "https://docs.example.com",
+              "type": "string"
+            },
+            {
+              "id": "4053b2be-8dbb-467e-9c82-08352258c329",
+              "name": "embeddings_url",
+              "value": "http://embeddings:80/embed",
+              "type": "string"
+            },
+            {
+              "id": "ddfab9e5-6116-4113-af5f-76f304642892",
+              "name": "embedding_model",
+              "value": "intfloat/multilingual-e5-small",
+              "type": "string"
+            },
+            {
+              "id": "67a79b2b-5238-4f7c-a3b6-af8989393495",
+              "name": "n8n_url",
+              "value": "https://n8n.example.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cab29958-16c2-4c54-a3b5-8de985f4f747",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ],
+      "notes": "Constantes del entorno. Edita aquí tu dominio de Outline, la URL del servidor de embeddings y el modelo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuración').first().json.n8n_url.replace(/\\/$/, '') }}/webhook/rag-index",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        }
+      },
+      "id": "399552d1-3a2b-4376-9417-ff3f0671f9f6",
+      "name": "Disparar indexado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ],
+      "notes": "Llama al webhook del flujo 01 para relanzar el indexado incremental.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "content": "### Reindexado automático\n\nOutline (Open Source) no envía webhooks cuando un documento cambia. La estrategia es **polling**: cada hora se lanza el indexado.\n\nComo el indexador es incremental (compara content_hash), solo se reprocesa lo que cambió. Configura aquí la URL de tu n8n.",
+        "height": 180,
+        "width": 620,
+        "color": 5
+      },
+      "id": "0140626f-fe8a-440d-a848-5d791c3abb98",
+      "name": "Notas auto-reindexado",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        60
+      ]
+    }
+  ],
+  "connections": {
+    "Cada hora": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Disparar indexado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "733110fc-5a39-573c-bb9f-b28b4f2c85af"
+}

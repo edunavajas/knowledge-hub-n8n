@@ -1,0 +1,534 @@
+{
+  "name": "01 - Indexar Outline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0df67c36-2a8a-4257-9e60-5a33cf9b9311",
+      "name": "Indexar ahora",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        200
+      ],
+      "notes": "Pulsa para indexar manualmente."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-index",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "458ab226-76c9-4b7e-b5d9-d8830e4f9af6",
+      "name": "Webhook indexar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        380
+      ],
+      "webhookId": "0e5d4d7f-6e51-4466-9def-8bc3d772f2dd",
+      "notes": "POST /webhook/rag-index. Protegido con la credencial de cabecera X-RAG-API-Key."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "63d3dd90-ed25-49ee-831b-f8375dffb1c9",
+              "name": "outline_url",
+              "value": "https://docs.example.com",
+              "type": "string"
+            },
+            {
+              "id": "68496d92-88c5-4eb5-94b6-006e365c0f3c",
+              "name": "embeddings_url",
+              "value": "http://embeddings:80/embed",
+              "type": "string"
+            },
+            {
+              "id": "b06ae8db-1b32-4899-ba80-82409e6c8d99",
+              "name": "embedding_model",
+              "value": "intfloat/multilingual-e5-small",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9db1c037-508d-4518-b497-dae19784429f",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        260
+      ],
+      "notes": "Constantes del entorno. Edita aquí tu dominio de Outline, la URL del servidor de embeddings y el modelo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuración').first().json.outline_url }}/api/documents.list",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "id": "26566966-21ea-4f4b-a5cd-3a029e0cdb52",
+      "name": "Listar documentos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        260
+      ],
+      "notes": "POST a la API de Outline. Pagina con nextPath hasta agotar resultados.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const docs = [];\nfor (const item of $input.all()) {\n  const value = item.json;\n  if (Array.isArray(value)) docs.push(...value);\n  else if (Array.isArray(value?.data)) docs.push(...value.data);\n  else if (Array.isArray(value?.documents)) docs.push(...value.documents);\n  else if (Array.isArray(value?.data?.documents)) docs.push(...value.data.documents);\n  else if (value?.id && value?.title) docs.push(value);\n}\nconst seen = new Set();\nreturn docs.filter((doc) => doc?.id && doc?.title && !seen.has(doc.id) && seen.add(doc.id))\n  .map((doc) => ({ json: { id: doc.id } }));"
+      },
+      "id": "f00dec5e-a0e4-4c87-8d55-1c08030b84c3",
+      "name": "Normalizar lista",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        260
+      ],
+      "notes": "Convierte la respuesta paginada en un item por documento, sin duplicados."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuración').first().json.outline_url }}/api/documents.info",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "09b4a727-d79d-47ad-998b-35c1ed24c7c7",
+      "name": "Leer documento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        260
+      ],
+      "notes": "Pide el contenido Markdown de cada documento por su id.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseUrl = $('Configuración').first().json.outline_url.replace(/\\/$/, '');\nconst output = [];\nfor (const item of $input.all()) {\n  const value = item.json;\n  const doc = value?.data?.id ? value.data : value;\n  const rawText = String(doc?.text ?? '').trim();\n  if (!doc?.id || !doc?.title || !rawText) continue;\n  const content = rawText.replace(/\\r\\n/g, '\\n').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  const url = baseUrl + (doc.url || '');\n  output.push({ json: {\n    source_type: 'outline',\n    external_id: doc.id,\n    title: doc.title,\n    collection: doc.collectionId || null,\n    content: doc.title + '\\n\\n' + content,\n    canonical_url: url,\n    metadata: {\n      outline_url: url,\n      collection_id: doc.collectionId || null,\n      parent_document_id: doc.parentDocumentId || null,\n      revision: doc.revision || null,\n      updated_at: doc.updatedAt || null\n    }\n  }});\n}\nreturn output;"
+      },
+      "id": "9445c309-d9dc-4d46-9894-9c47d7747522",
+      "name": "Normalizar documento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        260
+      ],
+      "notes": "Prepara el documento: texto limpio, URL canónica y metadatos de Outline."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.title, $json.collection, $json.content, $json.canonical_url, JSON.stringify($json.metadata)] }}"
+        }
+      },
+      "id": "2b224157-d23e-4d27-8c90-bf73138d12ec",
+      "name": "Guardar documento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1580,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "notes": "Upsert por (source_type, external_id). El content_hash marca si cambió."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c24c4600-faa9-45c0-836c-a1c3c57bb2fa",
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fd1b0ecc-a196-47fd-b83a-c838306f3720",
+      "name": "¿Documento cambiado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1800,
+        260
+      ],
+      "notes": "Solo trocea y embebe si el contenido cambió. Si no, no hace nada."
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\nfor (const item of $input.all()) {\n  const source = item.json;\n  const text = String(source.content || '').trim();\n  const maxChars = 1400;\n  const overlap = 220;\n  let start = 0;\n  let index = 0;\n  while (start < text.length) {\n    let end = Math.min(start + maxChars, text.length);\n    if (end < text.length) {\n      const boundary = Math.max(text.lastIndexOf('\\n\\n', end), text.lastIndexOf('\\n', end),\n        text.lastIndexOf('. ', end), text.lastIndexOf(' ', end));\n      if (boundary > start + 450) end = boundary + 1;\n    }\n    const content = text.slice(start, end).trim();\n    if (content) {\n      output.push({json:{\n        document_id:source.document_id, source_type:source.source_type, external_id:source.external_id,\n        title:source.title, collection:source.collection, canonical_url:source.canonical_url, content,\n        chunk_index:index, token_count:Math.ceil(content.split(/\\s+/).filter(Boolean).length * 1.3),\n        metadata:{...(source.metadata || {}), chunk_index:index}\n      }});\n      index++;\n    }\n    if (end >= text.length) break;\n    start = Math.max(end - overlap, start + 1);\n  }\n}\nreturn output;"
+      },
+      "id": "4252ab92-fe94-4d5e-a878-9158dad9abd4",
+      "name": "Trocear documento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        260
+      ],
+      "notes": "Divide en fragmentos de 1400 caracteres con solape de 220, cortando en límites naturales."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuración').first().json.embeddings_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ 'passage: ' + $json.content }}"
+            }
+          ]
+        }
+      },
+      "id": "eb3a3320-e216-4e53-a336-792f4e21fc8c",
+      "name": "Generar embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        260
+      ],
+      "notes": "El prefijo 'passage: ' es obligatorio en los modelos E5.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const model = $('Configuración').first().json.embedding_model;\nconst chunks = $('Trocear documento').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  let vector = raw;\n  if (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\n  if (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\n  if (!Array.isArray(vector) || vector.length !== 384) {\n    throw new Error('Embedding dimension mismatch: expected 384, received ' +\n      (Array.isArray(vector) ? vector.length : typeof vector));\n  }\n  const source = (chunks[i] && chunks[i].json) ? chunks[i].json : items[i].json;\n  out.push({ json: { ...source, embedding_model: model, embedding: vector } });\n}\nreturn out;"
+      },
+      "id": "ee7f8da9-48fc-4c04-ab65-0d793445c62a",
+      "name": "Normalizar embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        260
+      ],
+      "notes": "Comprueba que el vector tiene 384 dimensiones y lo asocia a su fragmento."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO knowledge_chunks\n  (document_id, chunk_index, content, token_count, embedding_model, embedding, metadata)\nVALUES ($1::uuid, $2::int, $3::text, $4::int, $5::text, $6::vector, $7::jsonb)\nON CONFLICT (document_id, chunk_index) DO UPDATE\n  SET content = EXCLUDED.content, token_count = EXCLUDED.token_count,\n      embedding_model = EXCLUDED.embedding_model, embedding = EXCLUDED.embedding,\n      metadata = EXCLUDED.metadata\nRETURNING document_id, chunk_index",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.document_id, $json.chunk_index, $json.content, $json.token_count, $json.embedding_model, '[' + $json.embedding.join(',') + ']', JSON.stringify($json.metadata)] }}"
+        }
+      },
+      "id": "1135eb01-4d31-4bbe-a0e8-b61118a4a6db",
+      "name": "Guardar fragmentos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2680,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Inserta o actualiza cada fragmento con su vector."
+    },
+    {
+      "parameters": {
+        "jsCode": "const documents = new Map();\nfor (const item of $input.all()) {\n  const documentId = item.json.document_id;\n  const chunkIndex = Number(item.json.chunk_index);\n  if (!documentId || !Number.isInteger(chunkIndex)) continue;\n  const current = documents.get(documentId);\n  documents.set(documentId, Math.max(current ?? -1, chunkIndex));\n}\nreturn [...documents.entries()].map(([document_id, last_chunk_index]) => ({\n  json: { document_id, keep_from_chunk_index: last_chunk_index + 1 }\n}));"
+      },
+      "id": "066439a1-351c-4c0a-a406-c2a50898eb40",
+      "name": "Preparar limpieza",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        260
+      ],
+      "notes": "Calcula qué fragmentos sobran si el documento se acortó."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM knowledge_chunks\nWHERE document_id = $1::uuid AND chunk_index >= $2::int\nRETURNING document_id, chunk_index",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.document_id, $json.keep_from_chunk_index] }}"
+        }
+      },
+      "id": "dda490dc-ffe3-4c11-95a0-3d8ff9e65548",
+      "name": "Borrar fragmentos sobrantes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Elimina la cola de fragmentos obsoletos tras una edición."
+    },
+    {
+      "parameters": {
+        "content": "### Ingesta de Outline → pgvector\n\nLee los documentos de Outline, los trocea, genera embeddings y los guarda en PostgreSQL.\n\nEs **incremental**: si un documento no cambió (mismo content_hash) no se vuelve a trocear ni a embeber.\n\nDisparadores: manual y POST /webhook/rag-index.",
+        "height": 190,
+        "width": 620,
+        "color": 5
+      },
+      "id": "a5b0b1ae-813f-471d-becf-4d2d087626ae",
+      "name": "Notas indexador",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        40
+      ]
+    }
+  ],
+  "connections": {
+    "Indexar ahora": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook indexar": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Listar documentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar documentos": {
+      "main": [
+        [
+          {
+            "node": "Normalizar lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar lista": {
+      "main": [
+        [
+          {
+            "node": "Leer documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer documento": {
+      "main": [
+        [
+          {
+            "node": "Normalizar documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar documento": {
+      "main": [
+        [
+          {
+            "node": "Guardar documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar documento": {
+      "main": [
+        [
+          {
+            "node": "¿Documento cambiado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Documento cambiado?": {
+      "main": [
+        [
+          {
+            "node": "Trocear documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trocear documento": {
+      "main": [
+        [
+          {
+            "node": "Generar embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar embeddings": {
+      "main": [
+        [
+          {
+            "node": "Normalizar embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar embedding": {
+      "main": [
+        [
+          {
+            "node": "Guardar fragmentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar fragmentos": {
+      "main": [
+        [
+          {
+            "node": "Preparar limpieza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar limpieza": {
+      "main": [
+        [
+          {
+            "node": "Borrar fragmentos sobrantes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "69c0811a-3330-565e-ab7d-e41bdccf2750"
+}
