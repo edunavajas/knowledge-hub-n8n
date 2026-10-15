@@ -175,7 +175,7 @@ Requisitos: tener ya desplegados (con Coolify) Outline, PostgreSQL + pgvector, e
 
 1. **Importar los flujos.** En n8n: *Workflows → Import from File* y sube los 5 JSON de `workflows/`. Activará los webhooks cuando actives cada flujo (los `POST`/`GET` de la sección siguiente). Los flujos se importan inactivos; actívalos cuando estén configurados.
 2. **Crear las credenciales** (n8n *Credentials → New*):
-   - **PostgreSQL**: host `postgres`, puerto `5432`, tu base de datos, usuario y contraseña. Es la credencial que usan los nodos `postgres` de los flujos 01, 02, 03 y 04.
+   - **PostgreSQL**: host `knowledge-db`, puerto `5432`, tu base de datos, usuario y contraseña. Es la credencial que usan los nodos `postgres` de los flujos 01, 02, 03 y 04.
    - **Header Auth "Outline API"**: cabecera `Authorization`, valor `Bearer <token>`. Es el token de la API de Outline. La usan los nodos HTTP que llaman a `/api/documents.*`.
    - **Header Auth "RAG API Key"**: cabecera `X-RAG-API-Key`, valor `<clave>`. La usan los webhooks (para autenticar a quien llama) y el nodo `Disparar indexado` del 05 (para autenticarse contra el 01).
 3. **Editar el nodo `Configuración` de cada flujo.** Es el paso que más se olvida: las constantes están en el lienzo, no en credenciales. En los flujos 01, 02 y 04 pon `outline_url` (tu dominio de Outline), `embeddings_url` (`http://embeddings:80/embed`) y `embedding_model` (`intfloat/multilingual-e5-small`). En el 05 añade `n8n_url` (`https://n8n.example.com`), la URL pública de tu propia instancia de n8n.
@@ -186,15 +186,43 @@ Requisitos: tener ya desplegados (con Coolify) Outline, PostgreSQL + pgvector, e
 
 ## Red entre recursos en Coolify
 
-Los tres recursos implicados (PostgreSQL+pgvector, TEI de embeddings y n8n) tienen que verse entre sí **por nombre de servicio dentro de la misma red Docker**. En Coolify esto se hace marcando **Connect to Predefined Network** en cada recurso (la red predefinida del stack donde vive n8n), de forma que Docker los resuelve por su nombre de servicio en lugar de por IP.
+Los tres recursos (PostgreSQL+pgvector, TEI de embeddings y n8n) tienen que verse entre
+sí **por nombre de servicio dentro de la misma red Docker**. En Coolify cada recurso vive
+en su **propia** red por defecto, así que hay que unirlos:
 
-Por eso las URLs de las constantes usan el **nombre del servicio**, no una IP ni un dominio:
+- **pgvector**: `Advanced → Docker compose → Predefined network` → cambia **`Isolated network only`** por la red **`coolify`**.
+- **n8n (Service)**: el mismo ajuste **`Predefined network`** → **`coolify`**.
+- **embeddings**: lo mismo.
 
-- Postgres: host `postgres`, puerto `5432` (en la credencial de PostgreSQL).
-- Embeddings: `http://embeddings:80/embed` (en `embeddings_url`). El puerto 80 es el puerto **interno** del contenedor TEI, no un puerto publicado al exterior.
-- n8n llama a Outline por su dominio público (`outline_url`), porque Outline se expone con Traefik.
+Y **redespliega** los tres (un simple *restart* no recrea el contenedor con la red nueva).
 
-La clave: **el nombre del servicio es el DNS**. `embeddings:80` funciona porque n8n y el contenedor de embeddings están en la misma red. Si no marcas *Connect to Predefined Network*, cada recurso queda en su propia red aislada, `embeddings` no resuelve y los nodos HTTP fallan con `ENOTFOUND`. No uses `localhost` ni `127.0.0.1`: cada contenedor es su propio `localhost`, no el del vecino.
+Con eso las URLs usan el **nombre del servicio**, no una IP ni un dominio:
+
+- Postgres: host **`knowledge-db`**, puerto `5432` (en la credencial de PostgreSQL).
+- Embeddings: `http://embeddings:80/embed` (en `embeddings_url`). El puerto 80 es el **interno** del contenedor TEI, no un puerto publicado.
+- n8n llama a Outline por su dominio público (`outline_url`), porque Outline sí se expone con Traefik.
+
+La clave: **el nombre del servicio es el DNS**. Si no los unes a la misma red, `knowledge-db`
+no resuelve y los nodos fallan con `EAI_AGAIN`/`ENOTFOUND`. No uses `localhost`: cada
+contenedor es su propio `localhost`, no el del vecino.
+
+### ⚠️ El nombre del servicio debe ser ÚNICO (por qué `knowledge-db` y no `postgres`)
+
+Esto costó un buen rato y es la mejor trampa para contar en cámara. En la red compartida
+`coolify` hay **muchos** contenedores. Si tu base se llamase `postgres` y en esa red
+**ya hubiera otro** contenedor con ese nombre, Docker resolvería `postgres` a **dos IPs**
+distintas y n8n conectaría unas veces a tu base y otras a la del vecino. El error que sale
+es de los que engañan muchísimo:
+
+> `password authentication failed for user "knowledge"`
+
+Parece de contraseña, pero es de **nombre**: estás hablando con otra base. Por eso este
+repo llama al servicio **`knowledge-db`**, un nombre único. Comprueba siempre que resuelve
+a **una sola IP**:
+
+```bash
+node -e 'require("dns").lookup("knowledge-db",{all:true},(e,a)=>console.log(e||a))'
+```
 
 ## Webhooks
 
