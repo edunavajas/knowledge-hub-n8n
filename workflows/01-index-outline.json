@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "0df67c36-2a8a-4257-9e60-5a33cf9b9311",
+      "id": "7b05f3d7-8dba-44ad-8292-4d3689328036",
       "name": "Indexar ahora",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -20,7 +20,7 @@
         "authentication": "headerAuth",
         "options": {}
       },
-      "id": "458ab226-76c9-4b7e-b5d9-d8830e4f9af6",
+      "id": "da08592b-218f-4e2e-b22f-4470f439b0b2",
       "name": "Webhook indexar",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -28,7 +28,7 @@
         240,
         380
       ],
-      "webhookId": "0e5d4d7f-6e51-4466-9def-8bc3d772f2dd",
+      "webhookId": "cc7448c9-192e-48eb-8721-a49ca46e064c",
       "notes": "POST /webhook/rag-index. Protegido con la credencial de cabecera X-RAG-API-Key."
     },
     {
@@ -39,19 +39,19 @@
         "assignments": {
           "assignments": [
             {
-              "id": "63d3dd90-ed25-49ee-831b-f8375dffb1c9",
+              "id": "718768d2-627d-4882-b469-024ca05756de",
               "name": "outline_url",
               "value": "https://docs.example.com",
               "type": "string"
             },
             {
-              "id": "68496d92-88c5-4eb5-94b6-006e365c0f3c",
+              "id": "122c5bc0-eac2-4680-b342-907f4656e1da",
               "name": "embeddings_url",
               "value": "http://embeddings:80/embed",
               "type": "string"
             },
             {
-              "id": "b06ae8db-1b32-4899-ba80-82409e6c8d99",
+              "id": "cd95aadc-603b-46d6-afa7-3fd64fa79eef",
               "name": "embedding_model",
               "value": "intfloat/multilingual-e5-small",
               "type": "string"
@@ -60,7 +60,7 @@
         },
         "options": {}
       },
-      "id": "9db1c037-508d-4518-b497-dae19784429f",
+      "id": "ff6a3b68-bfa7-4c8e-b893-43a194eb67e9",
       "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -97,7 +97,7 @@
           ]
         }
       },
-      "id": "26566966-21ea-4f4b-a5cd-3a029e0cdb52",
+      "id": "b148d03d-7296-4dbd-ba8d-e7650700dea6",
       "name": "Listar documentos",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -114,7 +114,7 @@
       "parameters": {
         "jsCode": "const docs = [];\nfor (const item of $input.all()) {\n  const value = item.json;\n  if (Array.isArray(value)) docs.push(...value);\n  else if (Array.isArray(value?.data)) docs.push(...value.data);\n  else if (Array.isArray(value?.documents)) docs.push(...value.documents);\n  else if (Array.isArray(value?.data?.documents)) docs.push(...value.data.documents);\n  else if (value?.id && value?.title) docs.push(value);\n}\nconst seen = new Set();\nreturn docs.filter((doc) => doc?.id && doc?.title && !seen.has(doc.id) && seen.add(doc.id))\n  .map((doc) => ({ json: { id: doc.id } }));"
       },
-      "id": "f00dec5e-a0e4-4c87-8d55-1c08030b84c3",
+      "id": "a02c3113-d163-49b6-89b3-4d052a61e238",
       "name": "Normalizar lista",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -147,7 +147,7 @@
           ]
         }
       },
-      "id": "09b4a727-d79d-47ad-998b-35c1ed24c7c7",
+      "id": "df535cef-8f72-4722-a3c0-a099a0022df4",
       "name": "Leer documento",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -164,7 +164,7 @@
       "parameters": {
         "jsCode": "const baseUrl = $('Configuración').first().json.outline_url.replace(/\\/$/, '');\nconst output = [];\nfor (const item of $input.all()) {\n  const value = item.json;\n  const doc = value?.data?.id ? value.data : value;\n  const rawText = String(doc?.text ?? '').trim();\n  if (!doc?.id || !doc?.title || !rawText) continue;\n  const content = rawText.replace(/\\r\\n/g, '\\n').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  const url = baseUrl + (doc.url || '');\n  output.push({ json: {\n    source_type: 'outline',\n    external_id: doc.id,\n    title: doc.title,\n    collection: doc.collectionId || null,\n    content: doc.title + '\\n\\n' + content,\n    canonical_url: url,\n    metadata: {\n      outline_url: url,\n      collection_id: doc.collectionId || null,\n      parent_document_id: doc.parentDocumentId || null,\n      revision: doc.revision || null,\n      updated_at: doc.updatedAt || null\n    }\n  }});\n}\nreturn output;"
       },
-      "id": "9445c309-d9dc-4d46-9894-9c47d7747522",
+      "id": "5456ad84-ede6-476d-9d00-11e09652fe5e",
       "name": "Normalizar documento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -177,13 +177,13 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
+        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (\n    COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)\n    OR NOT EXISTS (\n      SELECT 1 FROM knowledge_chunks c\n      WHERE c.document_id = COALESCE((SELECT id FROM upserted), (SELECT id FROM current))\n    )\n  ) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
         "options": {
           "queryBatching": "independently",
           "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.title, $json.collection, $json.content, $json.canonical_url, JSON.stringify($json.metadata)] }}"
         }
       },
-      "id": "2b224157-d23e-4d27-8c90-bf73138d12ec",
+      "id": "b0188b47-51e8-4557-ad92-6fa6e44dfd8b",
       "name": "Guardar documento",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -208,7 +208,7 @@
           },
           "conditions": [
             {
-              "id": "c24c4600-faa9-45c0-836c-a1c3c57bb2fa",
+              "id": "102a1293-284b-41db-b24c-aee50a74bb76",
               "leftValue": "={{ $json.changed }}",
               "rightValue": "",
               "operator": {
@@ -222,7 +222,7 @@
         },
         "options": {}
       },
-      "id": "fd1b0ecc-a196-47fd-b83a-c838306f3720",
+      "id": "dd4787d3-dffc-477d-8d00-1c650e49232f",
       "name": "¿Documento cambiado?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -236,7 +236,7 @@
       "parameters": {
         "jsCode": "const output = [];\nfor (const item of $input.all()) {\n  const source = item.json;\n  const text = String(source.content || '').trim();\n  const maxChars = 1400;\n  const overlap = 220;\n  let start = 0;\n  let index = 0;\n  while (start < text.length) {\n    let end = Math.min(start + maxChars, text.length);\n    if (end < text.length) {\n      const boundary = Math.max(text.lastIndexOf('\\n\\n', end), text.lastIndexOf('\\n', end),\n        text.lastIndexOf('. ', end), text.lastIndexOf(' ', end));\n      if (boundary > start + 450) end = boundary + 1;\n    }\n    const content = text.slice(start, end).trim();\n    if (content) {\n      output.push({json:{\n        document_id:source.document_id, source_type:source.source_type, external_id:source.external_id,\n        title:source.title, collection:source.collection, canonical_url:source.canonical_url, content,\n        chunk_index:index, token_count:Math.ceil(content.split(/\\s+/).filter(Boolean).length * 1.3),\n        metadata:{...(source.metadata || {}), chunk_index:index}\n      }});\n      index++;\n    }\n    if (end >= text.length) break;\n    start = Math.max(end - overlap, start + 1);\n  }\n}\nreturn output;"
       },
-      "id": "4252ab92-fe94-4d5e-a878-9158dad9abd4",
+      "id": "3ce86481-dafb-4868-83ad-acad8a92b362",
       "name": "Trocear documento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -267,7 +267,7 @@
           ]
         }
       },
-      "id": "eb3a3320-e216-4e53-a336-792f4e21fc8c",
+      "id": "f316cedf-9288-4546-94cb-634ca6dd98ee",
       "name": "Generar embeddings",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -275,16 +275,52 @@
         2240,
         260
       ],
-      "notes": "El prefijo 'passage: ' es obligatorio en los modelos E5.",
+      "notes": "El prefijo 'passage: ' es obligatorio en los modelos E5. Reintenta 5 veces; si aun asi falla, ese trozo se va a la rama de error y NO aborta el indexado.",
+      "onError": "continueErrorOutput",
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000
+      "maxTries": 5,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "const model = $('Configuración').first().json.embedding_model;\nconst chunks = $('Trocear documento').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  let vector = raw;\n  if (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\n  if (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\n  if (!Array.isArray(vector) || vector.length !== 384) {\n    throw new Error('Embedding dimension mismatch: expected 384, received ' +\n      (Array.isArray(vector) ? vector.length : typeof vector));\n  }\n  const source = (chunks[i] && chunks[i].json) ? chunks[i].json : items[i].json;\n  out.push({ json: { ...source, embedding_model: model, embedding: vector } });\n}\nreturn out;"
+        "jsCode": "// Rama de error del nodo de embeddings: llegan los trozos cuyo embedding fallo tras\n// agotar los reintentos. NO abortamos el indexado: normalizamos el registro para\n// guardarlo en la tabla knowledge_index_failures y seguimos con el resto.\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const err = j.error || {};\n  out.push({ json: {\n    reason: err.message || j.fail_reason || 'embedding_failed',\n    source_type: j.source_type ?? 'unknown',\n    external_id: j.external_id ?? null,\n    chunk_index: (typeof j.chunk_index === 'number') ? j.chunk_index : null\n  }});\n}\nif (!out.length) return [];\nreturn out;"
       },
-      "id": "ee7f8da9-48fc-4c04-ab65-0d793445c62a",
+      "id": "e9debf72-9569-4c84-8eee-0980743ab89f",
+      "name": "Registrar fallos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        470
+      ],
+      "notes": "Rama de error: normaliza los fallos y sigue. El resto de trozos se indexa igual."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO knowledge_index_failures (source_type, external_id, chunk_index, reason)\nVALUES ($1, $2, $3, $4)",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.chunk_index, $json.reason] }}"
+        }
+      },
+      "id": "f18a543e-8419-4404-affd-f79a5cbaa6c1",
+      "name": "Guardar fallo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2460,
+        470
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Deja registrado en knowledge_index_failures el embedding que fallo (motivo y trozo)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const model = $('Configuración').first().json.embedding_model;\nconst raw = $json;\nlet vector = raw;\nif (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\nif (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\nif (!Array.isArray(vector) || vector.length !== 384) {\n  throw new Error('Embedding dimension mismatch: expected 384, received ' +\n    (Array.isArray(vector) ? vector.length : typeof vector));\n}\n// Emparejamiento por item (pairedItem): cada respuesta vuelve con SU trozo, aunque\n// otros hayan fallado. Por eso este codigo corre \"una vez por item\".\nconst source = $('Trocear documento').item.json;\nreturn { json: { ...source, embedding_model: model, embedding: vector } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "44bc11e7-6a4c-4325-99f6-47b411e9510f",
       "name": "Normalizar embedding",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -292,7 +328,7 @@
         2460,
         260
       ],
-      "notes": "Comprueba que el vector tiene 384 dimensiones y lo asocia a su fragmento."
+      "notes": "Empareja cada vector con SU trozo (una vez por item) y valida las 384 dimensiones."
     },
     {
       "parameters": {
@@ -303,7 +339,7 @@
           "queryReplacement": "={{ [$json.document_id, $json.chunk_index, $json.content, $json.token_count, $json.embedding_model, '[' + $json.embedding.join(',') + ']', JSON.stringify($json.metadata)] }}"
         }
       },
-      "id": "1135eb01-4d31-4bbe-a0e8-b61118a4a6db",
+      "id": "ca4c4f60-3c81-4202-b2c8-7e09f859bcd7",
       "name": "Guardar fragmentos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -320,7 +356,7 @@
       "parameters": {
         "jsCode": "const documents = new Map();\nfor (const item of $input.all()) {\n  const documentId = item.json.document_id;\n  const chunkIndex = Number(item.json.chunk_index);\n  if (!documentId || !Number.isInteger(chunkIndex)) continue;\n  const current = documents.get(documentId);\n  documents.set(documentId, Math.max(current ?? -1, chunkIndex));\n}\nreturn [...documents.entries()].map(([document_id, last_chunk_index]) => ({\n  json: { document_id, keep_from_chunk_index: last_chunk_index + 1 }\n}));"
       },
-      "id": "066439a1-351c-4c0a-a406-c2a50898eb40",
+      "id": "8631df11-08b1-40f8-97ce-ef4fc21b8089",
       "name": "Preparar limpieza",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -339,7 +375,7 @@
           "queryReplacement": "={{ [$json.document_id, $json.keep_from_chunk_index] }}"
         }
       },
-      "id": "dda490dc-ffe3-4c11-95a0-3d8ff9e65548",
+      "id": "18156cf9-7938-41c6-8631-a24f5e5ac580",
       "name": "Borrar fragmentos sobrantes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -359,7 +395,7 @@
         "width": 620,
         "color": 5
       },
-      "id": "a5b0b1ae-813f-471d-becf-4d2d087626ae",
+      "id": "fe833113-f8ee-49ed-a20b-4b1d8ba3fcf9",
       "name": "Notas indexador",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -485,6 +521,24 @@
         [
           {
             "node": "Normalizar embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar fallos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar fallos": {
+      "main": [
+        [
+          {
+            "node": "Guardar fallo",
             "type": "main",
             "index": 0
           }

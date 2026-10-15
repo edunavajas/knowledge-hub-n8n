@@ -9,7 +9,7 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "fbb392d3-02fc-476f-bdc0-6b7c38ab9ab7",
+      "id": "226c1168-8bd0-41b1-8bda-4fc8b3018d2c",
       "name": "Webhook búsqueda",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -17,7 +17,7 @@
         240,
         300
       ],
-      "webhookId": "bd5fd56c-6ab4-4809-86c5-e9da5ecd8339",
+      "webhookId": "ff729ffe-1fdf-4da8-bcd9-0abaf933282d",
       "notes": "POST /webhook/rag-search. Cabecera X-RAG-API-Key. Cuerpo: { query, limit?, source_type? }."
     },
     {
@@ -28,19 +28,19 @@
         "assignments": {
           "assignments": [
             {
-              "id": "2f480c0d-fc78-485c-8da4-e0b9b3e3c7a7",
+              "id": "79fb92b3-5358-4bff-8fd1-252d491faa25",
               "name": "outline_url",
               "value": "https://docs.example.com",
               "type": "string"
             },
             {
-              "id": "b70da8f7-7f81-4fa2-b24d-e45f9c3fbf74",
+              "id": "a0f7086c-d153-4875-b44e-815b3c517d0d",
               "name": "embeddings_url",
               "value": "http://embeddings:80/embed",
               "type": "string"
             },
             {
-              "id": "2b600d80-8733-41dc-845c-579413b25e55",
+              "id": "fad6e322-cb66-428e-a4d7-fce98fab0057",
               "name": "embedding_model",
               "value": "intfloat/multilingual-e5-small",
               "type": "string"
@@ -49,7 +49,7 @@
         },
         "options": {}
       },
-      "id": "f616e680-6fa5-4f2c-bba1-9aa7dfcca902",
+      "id": "1be326ea-0c54-4006-a46c-4bb8d5405ac7",
       "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -63,7 +63,7 @@
       "parameters": {
         "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const body = item.json.body ?? item.json;\n  const query = String(body.query ?? '').trim();\n  if (!query) { out.push({ json: { valid: false, error: 'query is required' } }); continue; }\n  const requestedLimit = Number(body.limit ?? 5);\n  const limit = Number.isFinite(requestedLimit)\n    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20)\n    : 5;\n  const source_type = String(body.source_type ?? 'all').trim().toLowerCase() || 'all';\n  if (!['outline', 'repo', 'all'].includes(source_type)) {\n    out.push({ json: { valid: false, error: 'source_type must be one of: outline, repo, all' } });\n    continue;\n  }\n  out.push({ json: { valid: true, query, limit, source_type } });\n}\nreturn out;"
       },
-      "id": "04fb0c57-06c1-4701-93b4-5587cfaf01ef",
+      "id": "f42abc1f-df02-4cc6-8da3-24e02aff5976",
       "name": "Validar petición",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -97,7 +97,7 @@
         },
         "options": {}
       },
-      "id": "581e31de-4af2-4f28-8c43-36d876d43cb0",
+      "id": "76ca2719-9685-445c-a606-32db67f1de89",
       "name": "¿Petición válida?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -127,7 +127,7 @@
           ]
         }
       },
-      "id": "aa95e957-76fa-452f-84d2-cfb1c6ec2839",
+      "id": "52f7d251-4f98-46c4-8830-35bf93eaed34",
       "name": "Embeddings de consulta",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -145,7 +145,7 @@
       "parameters": {
         "jsCode": "const requests = $('Validar petición').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  let vector = raw;\n  if (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\n  if (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\n  if (!Array.isArray(vector) || vector.length !== 384) {\n    throw new Error('Embedding dimension mismatch: expected 384, received ' +\n      (Array.isArray(vector) ? vector.length : typeof vector));\n  }\n  const request = (requests[i] && requests[i].json) ? requests[i].json : items[i].json;\n  out.push({ json: { ...request, query_embedding: vector } });\n}\nreturn out;"
       },
-      "id": "6a2d8075-c24a-4cbb-a6a3-8cb953e81899",
+      "id": "7de9b5ab-c55f-42f9-bdd3-2f0bc1bc10e6",
       "name": "Normalizar embedding",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -165,7 +165,7 @@
           "queryReplacement": "={{ ['[' + $json.query_embedding.join(',') + ']', $json.source_type, $json.limit] }}"
         }
       },
-      "id": "eb466e28-9f75-49c4-a7dc-a7c73be4af0a",
+      "id": "d7ceb9b4-244c-4f75-85a0-2fcecc6a9b9f",
       "name": "Búsqueda semántica",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -186,7 +186,7 @@
           "responseCode": 200
         }
       },
-      "id": "3de73f72-32d8-4fad-84cd-e3751af2fb5c",
+      "id": "108028db-273e-4f50-b6a9-68ecf336b134",
       "name": "Responder resultados",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.3,
@@ -204,7 +204,7 @@
           "responseCode": 400
         }
       },
-      "id": "15895cde-5f9d-48af-92e8-4e994f3b4685",
+      "id": "8e81a040-0dc1-46eb-90a6-02d2df1ed549",
       "name": "Responder no válida",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.3,
@@ -222,7 +222,7 @@
           "responseCode": 502
         }
       },
-      "id": "9e236a60-bbc8-4c39-bbd3-445d7f3cf68e",
+      "id": "9317c0a0-70b0-4703-89e7-e3c3913a0599",
       "name": "Responder error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.3,
@@ -239,7 +239,7 @@
         "width": 520,
         "color": 5
       },
-      "id": "5d8a3d86-0271-490d-9b80-043a294ea177",
+      "id": "958cfc06-21d5-4be2-ad46-96afbecfdb15",
       "name": "Notas búsqueda",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,

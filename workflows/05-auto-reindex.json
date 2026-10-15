@@ -12,7 +12,7 @@
           ]
         }
       },
-      "id": "5751e02a-9424-47f5-bf59-791e441e6c3d",
+      "id": "2a4c6572-0292-4a08-9ef4-eeb1fb2b1e3e",
       "name": "Cada hora",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
@@ -30,25 +30,25 @@
         "assignments": {
           "assignments": [
             {
-              "id": "0260e07e-5540-4597-b6ed-c5a72d913562",
+              "id": "bd800be2-5bf7-48e4-bc06-ede7ff66b070",
               "name": "outline_url",
               "value": "https://docs.example.com",
               "type": "string"
             },
             {
-              "id": "4053b2be-8dbb-467e-9c82-08352258c329",
+              "id": "1309a23e-0c5c-41c4-a3a9-e9c237d15c0a",
               "name": "embeddings_url",
               "value": "http://embeddings:80/embed",
               "type": "string"
             },
             {
-              "id": "ddfab9e5-6116-4113-af5f-76f304642892",
+              "id": "c64d2b7c-fca7-4a31-8d34-a61e7ab618f9",
               "name": "embedding_model",
               "value": "intfloat/multilingual-e5-small",
               "type": "string"
             },
             {
-              "id": "67a79b2b-5238-4f7c-a3b6-af8989393495",
+              "id": "4f1f676a-5c93-45a8-b348-967f19c63956",
               "name": "n8n_url",
               "value": "https://n8n.example.com",
               "type": "string"
@@ -57,7 +57,7 @@
         },
         "options": {}
       },
-      "id": "cab29958-16c2-4c54-a3b5-8de985f4f747",
+      "id": "fd2bea58-e50d-440c-acdd-38fd03f51a7a",
       "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -85,7 +85,7 @@
           "parameters": []
         }
       },
-      "id": "399552d1-3a2b-4376-9417-ff3f0671f9f6",
+      "id": "c529b94b-8bcc-4316-9c3d-fa03249323e9",
       "name": "Disparar indexado",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -105,7 +105,7 @@
         "width": 620,
         "color": 5
       },
-      "id": "0140626f-fe8a-440d-a848-5d791c3abb98",
+      "id": "a4775491-6cac-4810-beb1-a441f7a1ddd0",
       "name": "Notas auto-reindexado",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,

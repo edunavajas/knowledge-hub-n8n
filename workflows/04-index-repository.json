@@ -8,7 +8,7 @@
         "authentication": "headerAuth",
         "options": {}
       },
-      "id": "e1d3ad26-ad51-44b3-8137-147870bb0be2",
+      "id": "abb11a7d-24cd-4e5d-8cc8-8e4ddd76a654",
       "name": "Webhook repositorio",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -16,7 +16,7 @@
         240,
         300
       ],
-      "webhookId": "242e6c39-a30d-45dc-9a9f-bc786c49d59c",
+      "webhookId": "9cdec997-465b-4d42-ae48-f2564406b8dc",
       "notes": "POST /webhook/rag-index-repo. Recibe documentos Markdown ya preparados (replace_all=true)."
     },
     {
@@ -27,19 +27,19 @@
         "assignments": {
           "assignments": [
             {
-              "id": "6633df69-b8ff-46d3-8ba5-2ee66ac19c9b",
+              "id": "9e1bfc07-b2f3-41ad-9ae3-450a6c838705",
               "name": "outline_url",
               "value": "https://docs.example.com",
               "type": "string"
             },
             {
-              "id": "762a239d-8fc3-48ca-8b79-15218e53cd52",
+              "id": "da230684-ac38-4f8b-a54b-84f19e1e0386",
               "name": "embeddings_url",
               "value": "http://embeddings:80/embed",
               "type": "string"
             },
             {
-              "id": "82c4f858-baf8-4064-b7e7-749ba50533ac",
+              "id": "527b0f42-3b3e-488a-9876-03b9339a7e41",
               "name": "embedding_model",
               "value": "intfloat/multilingual-e5-small",
               "type": "string"
@@ -48,7 +48,7 @@
         },
         "options": {}
       },
-      "id": "6b908f13-8ab6-44c7-85a5-9476f4e8f3bb",
+      "id": "70502184-c1ed-4458-86e6-cb5a3f65e40d",
       "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -62,7 +62,7 @@
       "parameters": {
         "jsCode": "const documents = [];\nfor (const item of $input.all()) {\n  const value = item.json;\n  if (Array.isArray(value)) documents.push(...value);\n  else if (Array.isArray(value?.body?.documents)) documents.push(...value.body.documents);\n  else if (Array.isArray(value?.documents)) documents.push(...value.documents);\n  else if (Array.isArray(value?.data?.documents)) documents.push(...value.data.documents);\n}\nconst replaceAll = $input.all().some((item) => item.json?.body?.replace_all === true || item.json?.replace_all === true || item.json?.data?.replace_all === true);\nif (!replaceAll) throw new Error('repository index requires replace_all=true');\nif (!documents.length) throw new Error('repository index payload must contain documents');\nconst seen = new Set();\nconst output = [];\nfor (const document of documents) {\n  const sourceType = String(document?.source_type ?? '').trim().toLowerCase();\n  const externalId = String(document?.external_id ?? '').trim();\n  const title = String(document?.title ?? '').trim();\n  const content = String(document?.content ?? '').replace(/\\r\\n/g, '\\n').trim();\n  if (sourceType !== 'repo' || !externalId || !title || !content || content.length > 200000) continue;\n  if (seen.has(externalId)) continue;\n  seen.add(externalId);\n  output.push({json:{\n    source_type: 'repo', external_id: externalId, title: title.slice(0, 200),\n    collection: String(document.collection || 'repositorio'), content,\n    canonical_url: String(document.canonical_url || ''),\n    metadata: document.metadata && typeof document.metadata === 'object' ? document.metadata : {}\n  }});\n}\nif (!output.length) throw new Error('repository index payload contained no valid documents');\nreturn output;"
       },
-      "id": "2b15b8ac-6483-4d13-9516-f3d22d044668",
+      "id": "96f0c110-d925-4719-8103-eb8822016e30",
       "name": "Normalizar documentos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -75,13 +75,13 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
+        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (\n    COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)\n    OR NOT EXISTS (\n      SELECT 1 FROM knowledge_chunks c\n      WHERE c.document_id = COALESCE((SELECT id FROM upserted), (SELECT id FROM current))\n    )\n  ) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
         "options": {
           "queryBatching": "independently",
           "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.title, $json.collection, $json.content, $json.canonical_url, JSON.stringify($json.metadata)] }}"
         }
       },
-      "id": "2837d070-5e98-431d-b56c-7a5717184579",
+      "id": "5e1a19ba-7dce-46d0-8557-608cc3267da4",
       "name": "Guardar documento",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -106,7 +106,7 @@
           },
           "conditions": [
             {
-              "id": "3d69adc8-6691-4c01-8b44-2ca0f13cd773",
+              "id": "c0f89b22-2c00-4a6c-8503-b7fbdc10a7ef",
               "leftValue": "={{ $json.changed }}",
               "rightValue": "",
               "operator": {
@@ -120,7 +120,7 @@
         },
         "options": {}
       },
-      "id": "f414b8cd-d707-42b7-9d01-beb93bd38d9e",
+      "id": "6de508d1-58dc-4830-acf1-a7585e06f327",
       "name": "¿Documento cambiado?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -133,7 +133,7 @@
       "parameters": {
         "jsCode": "const output = [];\nfor (const item of $input.all()) {\n  const source = item.json;\n  const text = String(source.content || '').trim();\n  const maxChars = 1400;\n  const overlap = 220;\n  let start = 0;\n  let index = 0;\n  while (start < text.length) {\n    let end = Math.min(start + maxChars, text.length);\n    if (end < text.length) {\n      const boundary = Math.max(text.lastIndexOf('\\n\\n', end), text.lastIndexOf('\\n', end),\n        text.lastIndexOf('. ', end), text.lastIndexOf(' ', end));\n      if (boundary > start + 450) end = boundary + 1;\n    }\n    const content = text.slice(start, end).trim();\n    if (content) {\n      output.push({json:{\n        document_id:source.document_id, source_type:source.source_type, external_id:source.external_id,\n        title:source.title, collection:source.collection, canonical_url:source.canonical_url, content,\n        chunk_index:index, token_count:Math.ceil(content.split(/\\s+/).filter(Boolean).length * 1.3),\n        metadata:{...(source.metadata || {}), chunk_index:index}\n      }});\n      index++;\n    }\n    if (end >= text.length) break;\n    start = Math.max(end - overlap, start + 1);\n  }\n}\nreturn output;"
       },
-      "id": "22669b6e-3925-4876-8e97-593f9e12f5d9",
+      "id": "79894052-2a69-4d38-9d7e-5713f35e4105",
       "name": "Trocear documento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -163,7 +163,7 @@
           ]
         }
       },
-      "id": "a1679269-66f7-4242-823c-9dbd43505359",
+      "id": "9e7595b6-9545-4093-938a-ac1504f056b5",
       "name": "Generar embeddings",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -171,15 +171,50 @@
         1560,
         300
       ],
+      "onError": "continueErrorOutput",
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000
+      "maxTries": 5,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "const model = $('Configuración').first().json.embedding_model;\nconst chunks = $('Trocear documento').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  let vector = raw;\n  if (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\n  if (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\n  if (!Array.isArray(vector) || vector.length !== 384) {\n    throw new Error('Embedding dimension mismatch: expected 384, received ' +\n      (Array.isArray(vector) ? vector.length : typeof vector));\n  }\n  const source = (chunks[i] && chunks[i].json) ? chunks[i].json : items[i].json;\n  out.push({ json: { ...source, embedding_model: model, embedding: vector } });\n}\nreturn out;"
+        "jsCode": "// Rama de error del nodo de embeddings: llegan los trozos cuyo embedding fallo tras\n// agotar los reintentos. NO abortamos el indexado: normalizamos el registro para\n// guardarlo en la tabla knowledge_index_failures y seguimos con el resto.\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const err = j.error || {};\n  out.push({ json: {\n    reason: err.message || j.fail_reason || 'embedding_failed',\n    source_type: j.source_type ?? 'unknown',\n    external_id: j.external_id ?? null,\n    chunk_index: (typeof j.chunk_index === 'number') ? j.chunk_index : null\n  }});\n}\nif (!out.length) return [];\nreturn out;"
       },
-      "id": "d8c6e3f7-dd39-4081-a004-34878cb0ac35",
+      "id": "58d9db1d-041b-4bd4-861a-f8779ec80acf",
+      "name": "Registrar fallos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        510
+      ],
+      "notes": "Rama de error: normaliza los fallos y sigue."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO knowledge_index_failures (source_type, external_id, chunk_index, reason)\nVALUES ($1, $2, $3, $4)",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.chunk_index, $json.reason] }}"
+        }
+      },
+      "id": "b1034427-604e-489c-979a-559f52afabf7",
+      "name": "Guardar fallo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1780,
+        510
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const model = $('Configuración').first().json.embedding_model;\nconst raw = $json;\nlet vector = raw;\nif (Array.isArray(raw) && Array.isArray(raw[0])) vector = raw[0];\nif (raw && Array.isArray(raw.embedding)) vector = raw.embedding;\nif (!Array.isArray(vector) || vector.length !== 384) {\n  throw new Error('Embedding dimension mismatch: expected 384, received ' +\n    (Array.isArray(vector) ? vector.length : typeof vector));\n}\n// Emparejamiento por item (pairedItem): cada respuesta vuelve con SU trozo, aunque\n// otros hayan fallado. Por eso este codigo corre \"una vez por item\".\nconst source = $('Trocear documento').item.json;\nreturn { json: { ...source, embedding_model: model, embedding: vector } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "d12747f0-305f-4760-986c-a7030031ce83",
       "name": "Normalizar embedding",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -197,7 +232,7 @@
           "queryReplacement": "={{ [$json.document_id, $json.chunk_index, $json.content, $json.token_count, $json.embedding_model, '[' + $json.embedding.join(',') + ']', JSON.stringify($json.metadata)] }}"
         }
       },
-      "id": "431297a3-390f-47d9-87da-293395f1cd1f",
+      "id": "762021ad-a7e5-48b0-8616-ccf9cd392fcc",
       "name": "Guardar fragmentos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -213,7 +248,7 @@
       "parameters": {
         "jsCode": "const documents = new Map();\nfor (const item of $input.all()) {\n  const documentId = item.json.document_id;\n  const chunkIndex = Number(item.json.chunk_index);\n  if (!documentId || !Number.isInteger(chunkIndex)) continue;\n  const current = documents.get(documentId);\n  documents.set(documentId, Math.max(current ?? -1, chunkIndex));\n}\nreturn [...documents.entries()].map(([document_id, last_chunk_index]) => ({\n  json: { document_id, keep_from_chunk_index: last_chunk_index + 1 }\n}));"
       },
-      "id": "6cd16d0c-cd3b-4ec7-b378-278c21327183",
+      "id": "160b49fb-9273-4c2a-b93e-1190bd44688e",
       "name": "Preparar limpieza",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -231,7 +266,7 @@
           "queryReplacement": "={{ [$json.document_id, $json.keep_from_chunk_index] }}"
         }
       },
-      "id": "93e2fe55-c62f-4754-957f-e514624a0124",
+      "id": "9e6c2826-6492-4eb4-96c6-d8f1606fb1c3",
       "name": "Borrar fragmentos sobrantes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -247,7 +282,7 @@
       "parameters": {
         "jsCode": "const external_ids = [...new Set($input.all()\n  .map((item) => String(item.json.external_id || '').trim())\n  .filter(Boolean))];\nif (!external_ids.length) throw new Error('repository cleanup received no external ids');\nreturn [{json:{external_ids_text: external_ids.join('\\n')}}];"
       },
-      "id": "2c1b3083-b76c-48bc-afa5-9c72ee50cc80",
+      "id": "61d882c5-3082-4bc3-bf1f-038b919f371c",
       "name": "Preparar limpieza repo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -266,7 +301,7 @@
           "queryReplacement": "={{ [$json.external_ids_text] }}"
         }
       },
-      "id": "89824863-f3c3-4f2f-9155-465e458c7e72",
+      "id": "a810d0b9-50cf-49c6-8a32-9431b61c8584",
       "name": "Borrar fragmentos repo",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -287,7 +322,7 @@
           "queryReplacement": "={{ [$json.external_ids_text] }}"
         }
       },
-      "id": "8a32b1f0-6141-4c9e-9d84-38c2e65becaf",
+      "id": "6c1559c6-73b1-400a-b8a9-b6fa48ed242e",
       "name": "Borrar documentos repo",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -306,7 +341,7 @@
         "width": 660,
         "color": 5
       },
-      "id": "92af70ca-dc26-4bda-b6da-3aba45279852",
+      "id": "990b11c5-e993-4960-a6c7-39c71bd9f632",
       "name": "Notas repositorio",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -396,6 +431,24 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Registrar fallos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar fallos": {
+      "main": [
+        [
+          {
+            "node": "Guardar fallo",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -439,13 +492,7 @@
             "node": "Borrar fragmentos repo",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Borrar fragmentos repo": {
-      "main": [
-        [
+          },
           {
             "node": "Borrar documentos repo",
             "type": "main",

@@ -9,7 +9,7 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "052419ed-1914-4401-becd-680d3205c1a4",
+      "id": "83fe9513-ee4f-4f30-9de1-7cb1eb6458ca",
       "name": "Webhook salud",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -17,7 +17,7 @@
         260,
         300
       ],
-      "webhookId": "32008c77-945e-4fbd-ad41-a70ebaf3f8fe",
+      "webhookId": "942dd124-bba8-4af4-8acd-6c62f1e18c6d",
       "notes": "GET /webhook/rag-health. Cabecera X-RAG-API-Key."
     },
     {
@@ -26,7 +26,7 @@
         "query": "SELECT\n  (SELECT COUNT(*) FROM knowledge_documents WHERE source_type = 'outline')::int AS outline_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.source_type = 'outline')::int AS outline_chunks,\n  (SELECT COUNT(*) FROM knowledge_documents WHERE source_type = 'repo')::int AS repo_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.source_type = 'repo')::int AS repo_chunks,\n  (SELECT COUNT(*) FROM knowledge_documents)::int AS total_documents,\n  (SELECT COUNT(*) FROM knowledge_chunks)::int AS total_chunks,\n  (SELECT MAX(updated_at) FROM knowledge_documents WHERE source_type = 'outline') AS last_outline_update,\n  (SELECT MAX(updated_at) FROM knowledge_documents WHERE source_type = 'repo') AS last_repo_update,\n  (SELECT COUNT(*) FROM knowledge_chunks WHERE embedding_model IS NOT NULL)::int AS embedded_chunks",
         "options": {}
       },
-      "id": "e9f91984-e635-498e-aa99-44b98bcb11be",
+      "id": "d9d2c50c-ac75-46f0-b1a5-1be97a75f40c",
       "name": "Leer salud",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -46,7 +46,7 @@
           "responseCode": 200
         }
       },
-      "id": "2ddfe9ab-8351-4e80-8656-c10b628e3e4f",
+      "id": "1e5623d1-4825-41be-b281-5845ff176ffd",
       "name": "Responder salud",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.3,
@@ -64,7 +64,7 @@
           "responseCode": 503
         }
       },
-      "id": "df86c345-de24-4269-b724-19ac9ebb30cc",
+      "id": "a8ea7173-dc35-4947-bc6c-73b354b83cd0",
       "name": "Responder error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.3,
@@ -81,7 +81,7 @@
         "width": 440,
         "color": 5
       },
-      "id": "7793658b-e5a6-407e-ab9b-5b4e9c904d50",
+      "id": "33fb87bc-3bcb-40fc-b791-937279d783ee",
       "name": "Notas salud",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
