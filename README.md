@@ -259,6 +259,25 @@ El array del `queryReplacement` se mapea posición a posición con `$1, $2, $3�
 
 **(c) Los nodos HTTP necesitan `authentication: "genericCredentialType"` + `genericAuthType: "httpHeaderAuth"`, o no envían la cabecera.** Es fácil configurar la credencial de cabecera, asignarla… y olvidar estos dos campos en el nodo. El resultado es un **401** silencioso: n8n no manda la cabecera `Authorization`/`X-RAG-API-Key` porque el nodo no está configurado para usar autenticación genérica. Los dos campos van juntos: `genericCredentialType` habilita la autenticación por credencial, y `genericAuthType: "httpHeaderAuth"` dice que el tipo es cabecera HTTP. Sin ambos, la cabecera no sale y Outline (o tu propio webhook) rechaza la llamada.
 
+## Robustez: qué pasa si un embedding falla
+
+En los flujos **01** y **04**, el nodo `Generar embeddings` **reintenta 5 veces** cada
+fragmento y, si aun así falla, ese fragmento se va por una **rama de error** en vez de
+tumbar el indexado completo:
+
+- **`Registrar fallos`** → normaliza el fallo (origen, documento, fragmento, motivo).
+- **`Guardar fallo`** → lo deja registrado en la tabla **`knowledge_index_failures`** de PostgreSQL.
+
+Resultado: si el servidor de embeddings se satura a mitad de una indexación, **el resto
+de la documentación se indexa igual**, y queda anotado qué se quedó fuera y por qué.
+
+Y lo más importante: como un documento **sin fragmentos** se considera "cambiado", **la
+siguiente reindexación lo repara sola**. Es decir, un fallo parcial no deja nada huérfano
+para siempre.
+
+> Requisito: la tabla `knowledge_index_failures` la crea el esquema de `coolify-pgvector`
+> (ver `db/init/01-schema.sql`). Si ya tenías la base de antes, créala una vez a mano.
+
 ## Estructura del repositorio
 
 ```
