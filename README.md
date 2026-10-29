@@ -52,14 +52,14 @@ Orden de nodos:
 1. **Indexar ahora** (`manualTrigger`) — disparador manual para lanzar el indexado desde el editor de n8n.
 2. **Webhook indexar** (`webhook`, `POST /webhook/rag-index`) — el otro disparador, la ruta HTTP que usará el flujo 05 (y cualquier cliente externo). Protegido con `authentication: headerAuth` (credencial con la cabecera `X-RAG-API-Key`).
 3. **Configuración** (`set`) — define tres constantes: `outline_url` (tu dominio de Outline, p. ej. `https://docs.example.com`), `embeddings_url` (p. ej. `http://embeddings:80/embed`) y `embedding_model` (`intfloat/multilingual-e5-small`). El resto de nodos las leen con `$('Configuración').first().json.<campo>`. Ambos disparadores entran aquí.
-4. **Listar documentos** (`httpRequest`) — `POST {outline_url}/api/documents.list` con `limit: 100`, `offset: 0`. Es la API de Outline (misma credencial que da acceso con token). Devuelve la lista paginada; Outline incluye un `nextPath` para pedir la siguiente página. Tiene `retryOnFail` con 3 intentos.
+4. **Listar documentos** (`httpRequest`) — `POST {outline_url}/api/documents.list` con `limit: 100` y un `offset` que sube de 100 en 100. Es la API de Outline (misma credencial que da acceso con token). **Pagina de verdad**: usa la opción *Pagination* del nodo (`$pageCount * 100` como `offset`) y para cuando recibe una página con menos de 100 documentos (máximo 100 páginas, es decir 10.000 documentos). Tiene `retryOnFail` con 3 intentos.
 5. **Normalizar lista** (`code`) — convierte la respuesta paginada en **un item por documento** (objeto `{ json: { id } }`), aceptando varias formas de respuesta (array, `data`, `documents`, `data.documents`), y elimina duplicados por `id` con un `Set`. Es un good example del patrón que verás en todos los Code nodes: usa `$input.all()` y devuelve un array.
 6. **Leer documento** (`httpRequest`) — `POST {outline_url}/api/documents.info` con el `id` de cada item. Devuelve el cuerpo Markdown completo del documento.
 7. **Normalizar documento** (`code`) — limpia el texto (normaliza saltos de línea, colapsa espacios y líneas en blanco), calcula la URL canónica (`outline_url` + `doc.url`) y construye el item final: `source_type: 'outline'`, `external_id` (el id de Outline), `title`, `collection`, `content` (título + texto, para que el título entre en el embedding), `canonical_url` y `metadata` (collection, parent, revision, updatedAt…).
-8. **Guardar documento** (`postgres`, `executeQuery`) — el **upsert incremental**. Inserta o actualiza en `knowledge_documents` por la clave `(source_type, external_id)`. El `content_hash` es un `md5()` del cuerpo: si el hash no cambió, el `DO UPDATE ... WHERE content_hash IS DISTINCT FROM ...` **no actualiza nada**. Devuelve `document_id` y un booleano `changed` que dice si el contenido es distinto del que ya había (o si es nuevo).
+8. **Guardar documento** (`postgres`, `executeQuery`) — el **upsert incremental**. Inserta o actualiza en `knowledge_documents` por la clave `(source_type, external_id)`. El `content_hash` es un `md5()` del cuerpo: si el hash no cambió, el `DO UPDATE ... WHERE content_hash IS DISTINCT FROM ...` **no actualiza nada**. Devuelve `document_id` y un booleano `changed` que dice si el contenido es distinto del que ya había (o si es nuevo), si el documento no tiene fragmentos o si tiene filas en `knowledge_index_failures` (un fallo parcial anterior; esas filas se borran en la misma consulta, ver *Robustez*).
 9. **¿Documento cambiado?** (`if`) — rama `true` solo si `changed` es verdadero. Si el documento no cambió, la ejecución del item termina aquí: no se trocea ni se embebe.
 10. **Trocear documento** (`code`) — **chunking**. Parte el texto en fragmentos de ~1.400 caracteres con un **solape** de 220 caracteres entre fragmentos consecutivos. Antes de cortar, retrocede hasta el último límite natural (párrafo `\n\n`, salto de línea, fin de frase `. ` o espacio) si está a más de 450 caracteres del inicio del fragmento. Cada fragmento guarda `chunk_index`, un `token_count` estimado (~1,3 × palabras) y metadata con el índice.
-11. **Generar embeddings** (`httpRequest`) — `POST` a `embeddings_url` con `inputs = 'passage: ' + contenido`. El prefijo **`passage:` es obligatorio** en los modelos E5 (ver más abajo). Una llamada por fragmento.
+11. **Generar embeddings** (`httpRequest`) — `POST` a `embeddings_url` con `inputs = 'passage: ' + contenido`. El prefijo **`passage:` es obligatorio** en los modelos E5 (ver más abajo). Una llamada por fragmento, con **Batching** activado (5 peticiones cada 200 ms; ver *Robustez*).
 12. **Normalizar embedding** (`code`) — valida que el vector tiene exactamente **384 dimensiones** (si no, lanza error) y lo asocia a su fragmento de origen (`$('Trocear documento').all()[i]`) para no perder la relación chunk ↔ vector.
 13. **Guardar fragmentos** (`postgres`, `executeQuery`) — inserta o actualiza cada fragmento en `knowledge_chunks` por la clave `(document_id, chunk_index)`, con el vector serializado como `'[0.1,0.2,…]'` casteado a `vector`. El `ON CONFLICT ... DO UPDATE` hace que reindexar un chunk lo sobrescriba en lugar de duplicarlo.
 14. **Preparar limpieza** (`code`) — calcula, por documento, el mayor `chunk_index` insertado (`keep_from_chunk_index = max + 1`). Sirve para detectar la cola sobrante.
@@ -271,9 +271,36 @@ tumbar el indexado completo:
 Resultado: si el servidor de embeddings se satura a mitad de una indexación, **el resto
 de la documentación se indexa igual**, y queda anotado qué se quedó fuera y por qué.
 
-Y lo más importante: como un documento **sin fragmentos** se considera "cambiado", **la
-siguiente reindexación lo repara sola**. Es decir, un fallo parcial no deja nada huérfano
-para siempre.
+### Dos fallos reales que se corrigieron en el flujo 01
+
+Al indexar un corpus de 77 documentos (1103 fragmentos) en un VPS de 4 vCPU aparecieron dos problemas:
+
+**1. Demasiadas peticiones a la vez (`read ECONNRESET`).** n8n lanzaba las ~1100 peticiones a TEI de golpe;
+TEI las encola (en las pruebas llegó a más de 13 s de cola) y, al agotarse los reintentos, ~670 fragmentos acababan
+en `knowledge_index_failures` con `read ECONNRESET` en la primera pasada.
+*Arreglo:* el nodo `Generar embeddings` del 01 usa ahora **Options → Batching** con
+`Items per batch = 5` y `Batch Interval = 200 ms` (≈ 25 peticiones/s, por debajo de lo que
+TEI con 4 vCPU procesa, ~40/s). Ojo: en el nodo HTTP Request el *Batch Interval* es una pausa
+entre lotes de peticiones, no espera a que acaben, así que el intervalo importa tanto como el tamaño.
+Resultado en la prueba: una sola pasada desde cero, 77 documentos, 1103 fragmentos, 0 fallos, ~50 s.
+Si tu servidor es más lento o más rápido, ajusta esos dos valores (si ves `ECONNRESET`, baja el ritmo).
+
+**2. Un documento a medias no se reparaba solo.** Antes solo se reintentaba un documento si no tenía
+**ningún** fragmento; si tenía algunos y otros habían fallado, quedaba incompleto para siempre.
+*Arreglo:* en `Guardar documento`, `changed` también es verdadero cuando el documento tiene filas en
+`knowledge_index_failures`. En esa misma consulta se **borran esas filas** (CTE `purged`), así que la
+tabla refleja los fallos pendientes: si un fragmento vuelve a fallar, se registra de nuevo y el documento
+se reintenta en la siguiente pasada; si todo va bien, las filas desaparecen. Un documento reparado se
+vuelve a trocear y a embeber entero (no solo los fragmentos fallidos).
+
+Prueba: parando TEI unos segundos a mitad de una indexación quedaron 215 fallos en 14 documentos (dos de
+ellos parciales); una única reindexación normal los dejó todos completos y `knowledge_index_failures` a 0.
+
+Además, `Listar documentos` ahora **pagina de verdad** (antes la nota decía que paginaba pero hacía una sola
+petición de 100 documentos). Se comprobó con páginas de 25: 4 peticiones, 77 documentos.
+
+> Pendiente: el flujo **04** (indexar repositorio) comparte el mismo patrón de `Generar embeddings` y
+> `Guardar documento`, pero estos cambios se han aplicado y probado solo en el 01.
 
 > Requisito: la tabla `knowledge_index_failures` la crea el esquema de `coolify-pgvector`
 > (ver `db/init/01-schema.sql`). Si ya tenías la base de antes, créala una vez a mano.
