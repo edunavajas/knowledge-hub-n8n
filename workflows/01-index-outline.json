@@ -79,6 +79,24 @@
             "response": {
               "responseFormat": "json"
             }
+          },
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "offset",
+                    "value": "={{ $pageCount * 100 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.data.length < 100 }}",
+              "limitPagesFetched": true,
+              "maxRequests": 100
+            }
           }
         },
         "authentication": "genericCredentialType",
@@ -105,7 +123,7 @@
         700,
         260
       ],
-      "notes": "POST a la API de Outline. Pagina con nextPath hasta agotar resultados.",
+      "notes": "POST a la API de Outline. Pagina de verdad: pide 100 documentos por peticion, subiendo offset en cada pagina, hasta recibir una pagina incompleta (maximo 100 paginas).",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000
@@ -177,7 +195,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (\n    COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)\n    OR NOT EXISTS (\n      SELECT 1 FROM knowledge_chunks c\n      WHERE c.document_id = COALESCE((SELECT id FROM upserted), (SELECT id FROM current))\n    )\n  ) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
+        "query": "WITH current AS (\n  SELECT id, content_hash FROM knowledge_documents\n  WHERE source_type = $1 AND external_id = $2\n),\nupserted AS (\n  INSERT INTO knowledge_documents\n    (source_type, external_id, title, collection, content, content_hash, canonical_url, metadata)\n  VALUES ($1, $2, $3, $4, $5, md5($5::text), $6, $7::jsonb)\n  ON CONFLICT (source_type, external_id) DO UPDATE\n    SET title = EXCLUDED.title, collection = EXCLUDED.collection, content = EXCLUDED.content,\n        content_hash = EXCLUDED.content_hash, canonical_url = EXCLUDED.canonical_url,\n        metadata = EXCLUDED.metadata, updated_at = now()\n    WHERE knowledge_documents.content_hash IS DISTINCT FROM EXCLUDED.content_hash\n  RETURNING id\n),\npurged AS (\n  DELETE FROM knowledge_index_failures\n  WHERE source_type = $1 AND external_id = $2\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM upserted), (SELECT id FROM current)) AS document_id,\n  (\n    COALESCE((SELECT content_hash FROM current), '') IS DISTINCT FROM md5($5::text)\n    OR NOT EXISTS (\n      SELECT 1 FROM knowledge_chunks c\n      WHERE c.document_id = COALESCE((SELECT id FROM upserted), (SELECT id FROM current))\n    )\n    OR EXISTS (SELECT 1 FROM purged)\n  ) AS changed,\n  $1::text AS source_type, $2::text AS external_id, $3::text AS title, $4::text AS collection,\n  $5::text AS content, $6::text AS canonical_url, $7::jsonb AS metadata",
         "options": {
           "queryBatching": "independently",
           "queryReplacement": "={{ [$json.source_type, $json.external_id, $json.title, $json.collection, $json.content, $json.canonical_url, JSON.stringify($json.metadata)] }}"
@@ -195,7 +213,7 @@
       "maxTries": 3,
       "waitBetweenTries": 5000,
       "alwaysOutputData": true,
-      "notes": "Upsert por (source_type, external_id). El content_hash marca si cambió."
+      "notes": "Upsert por (source_type, external_id). El content_hash marca si cambió. También se reindexa si el documento no tiene fragmentos o si tiene filas en knowledge_index_failures (fallo parcial anterior); esas filas se borran aquí y, si algún fragmento vuelve a fallar, se registran de nuevo."
     },
     {
       "parameters": {
@@ -255,6 +273,12 @@
             "response": {
               "responseFormat": "json"
             }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 200
+            }
           }
         },
         "sendBody": true,
@@ -275,7 +299,7 @@
         2240,
         260
       ],
-      "notes": "El prefijo 'passage: ' es obligatorio en los modelos E5. Reintenta 5 veces; si aun asi falla, ese trozo se va a la rama de error y NO aborta el indexado.",
+      "notes": "El prefijo 'passage: ' es obligatorio en los modelos E5. Batching: envia 5 peticiones a la vez a TEI (y espera 200 ms entre lotes) para no saturarlo: sin esto n8n lanza ~1100 peticiones de golpe y TEI responde ECONNRESET. Reintenta 5 veces; si aun asi falla, ese trozo se va a la rama de error y NO aborta el indexado.",
       "onError": "continueErrorOutput",
       "retryOnFail": true,
       "maxTries": 5,
